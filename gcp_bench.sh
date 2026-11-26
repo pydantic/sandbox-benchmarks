@@ -15,7 +15,7 @@ N=${1:-15}
 OUT=${2:-gcp_bench_output.txt}
 PROJECT=${PROJECT:?set PROJECT to a GCP project}
 ZONE=${ZONE:-us-east4-a}
-PROVIDERS=${PROVIDERS:-logfire logfire_turbo modal daytona e2b vercel cloudflare_sandbox boat:5}
+PROVIDERS=${PROVIDERS:-logfire logfire_turbo modal daytona e2b vercel cloudflare_sandbox boat:5 boxd}
 VM=sandbox-bench-$(date +%s)
 GC=(gcloud compute --project "$PROJECT")
 
@@ -46,6 +46,7 @@ export VERCEL_OIDC_TOKEN='${VERCEL_OIDC_TOKEN:-}'
 export CLOUDFLARE_SANDBOX_URL='${CLOUDFLARE_SANDBOX_URL:-}'
 export CLOUDFLARE_SANDBOX_KEY='${CLOUDFLARE_SANDBOX_KEY:-}'
 export BOAT_API_KEY='${BOAT_API_KEY:-}'
+export BOXD_API_KEY='${BOXD_API_KEY:-}'
 EOF
     cp ~/.modal.toml "$work/.modal.toml"
 )

@@ -1,7 +1,7 @@
 # Sandbox Benchmarks
 
 An experiment comparing how code running in a remote sandbox can call functions on the host machine, across
-seven sandbox providers. Each script runs the same sandboxed program, a tune that calls `play(note, seconds)`
+eight sandbox providers. Each script runs the same sandboxed program, a tune that calls `play(note, seconds)`
 78 times, and the host plays each note through the speakers.
 
 ## Files
@@ -18,6 +18,7 @@ seven sandbox providers. Each script runs the same sandboxed program, a tune tha
 - `play_tune_cloudflare_sandbox.py`: Cloudflare sandboxes. The same JSON-lines protocol, over a WebSocket to the
   Worker in `cloudflare_sandbox/`, which passes it to the stdin and stdout of the program in a container.
 - `play_tune_boat.py`: boat.dev. The same JSON-lines protocol, over `ssh`, since its commands have no stdin.
+- `play_tune_boxd.py`: boxd. The same JSON-lines protocol, over the stdin and stdout of an interactive `exec`.
 
 `benchmarks/` has one module per provider, each running the same five cases:
 
@@ -25,9 +26,9 @@ seven sandbox providers. Each script runs the same sandboxed program, a tune tha
   for a new session to having the result, and the REPL the providers other than Logfire and Daytona run in
   the sandbox.
 - `logfire.py`, `logfire_turbo.py` (Logfire with `pre_warm`), `modal.py`, `e2b.py`, `daytona.py`, `vercel.py`,
-  `cloudflare_sandbox.py`, `boat.py`: a `Pool` whose `checkout()` gives a `Session`. Its `run(code)` runs a program
-  the provider's own way and is what `1 + 1 direct` uses; its `feed_run(code, external_lookup=...)` has Monty's
-  interface, and for that each provider but Logfire starts a small REPL in the sandbox over the
+  `cloudflare_sandbox.py`, `boat.py`, `boxd.py`: a `Pool` whose `checkout()` gives a `Session`. Its `run(code)` runs a
+  program the provider's own way and is what `1 + 1 direct` uses; its `feed_run(code, external_lookup=...)` has
+  Monty's interface, and for that each provider but Logfire starts a small REPL in the sandbox over the
   same transport as its `play_tune_*.py` script, so state survives between feeds and each feed returns its
   last expression. To add a provider, add a module with a `Pool` and a `Session` and call `main`.
 
@@ -57,7 +58,7 @@ uv run play_tune/play_tune.py           # or play_tune/play_tune_modal.py, play_
 Each benchmark is a module, run from the repo root, taking the number of sessions per case (default 5):
 
 ```bash
-uv run -m benchmarks.logfire 5     # or logfire_turbo, modal, e2b, daytona, vercel, cloudflare_sandbox, boat
+uv run -m benchmarks.logfire 5     # or logfire_turbo, modal, e2b, daytona, vercel, cloudflare_sandbox, boat, boxd
 ```
 
 To run it from US east, which creates a VM in a GCP project of yours and deletes it afterwards:
@@ -74,7 +75,7 @@ Credentials:
 - Modal uses the credentials written by `modal setup`.
 - Vercel needs `VERCEL_OIDC_TOKEN`; Cloudflare sandboxes need
   `CLOUDFLARE_SANDBOX_URL` (`wss://...workers.dev`) and `CLOUDFLARE_SANDBOX_KEY` (the Worker's `API_KEY`); boat
-  needs `BOAT_API_KEY`. All go in `.env`.
+  needs `BOAT_API_KEY`; boxd needs `BOXD_API_KEY`. All go in `.env`.
 
 Never print, log or commit key values.
 
@@ -125,6 +126,7 @@ for most means deleting the sandbox, is timed separately and saved under `end`; 
   12 hours. Each reply to a call is its own HTTPS request, about 200ms from London, and stopping and deleting
   a sandbox takes about 1.4 seconds.
 - The Cloudflare sandbox Worker deploys under the name `sandbox-host-function`.
+- The boxd machines are in its `nyc` region, the nearest to `us-east4`. boxd also has `fra`.
 - Closing the WebSocket ends a Cloudflare sandbox session, and the Worker destroys the container after that,
   so its `end` times are near zero and do not include the deletion. The first message on the socket is the
   program to run, so one of its sessions can do a `run` or a series of `feed_run`s, not both.

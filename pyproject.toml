@@ -6,6 +6,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
     "boat-sdk>=1.13.0",
+    "boxd>=0.3.5",
     "daytona>=0.232.0",
     "e2b-code-interpreter>=2.11.10",
     "httpx>=0.28.1",
