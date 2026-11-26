@@ -1,0 +1,148 @@
+{
+  "provider": "Cloudflare Dynamic Workers (JS)",
+  "url": "https://developers.cloudflare.com/dynamic-workers/",
+  "date": "2026-11-26",
+  "location": "GCP us-east4-a",
+  "sessions": 15,
+  "note": "The modules are JavaScript, not the shared Python, and await each call to the host. There is no REPL: Workers only compile code from a string while a module loads, so an isolate cannot run one feed after another, and the two cases that keep state between feeds fail.",
+  "cases": {
+    "1 + 1": {
+      "median": 71,
+      "min": 57,
+      "max": 152,
+      "times": [
+        152,
+        78,
+        57,
+        68,
+        80,
+        99,
+        74,
+        63,
+        64,
+        71,
+        127,
+        78,
+        64,
+        63,
+        65
+      ],
+      "end": {
+        "median": 6,
+        "min": 5,
+        "max": 7,
+        "times": [
+          6,
+          7,
+          6,
+          5,
+          7,
+          6,
+          6,
+          5,
+          5,
+          6,
+          6,
+          6,
+          7,
+          5,
+          5
+        ]
+      }
+    },
+    "1 + 1 direct": {
+      "median": 71,
+      "min": 56,
+      "max": 108,
+      "times": [
+        73,
+        108,
+        67,
+        59,
+        74,
+        70,
+        61,
+        56,
+        65,
+        71,
+        74,
+        62,
+        77,
+        86,
+        79
+      ],
+      "end": {
+        "median": 5,
+        "min": 4,
+        "max": 8,
+        "times": [
+          4,
+          8,
+          5,
+          5,
+          6,
+          5,
+          6,
+          5,
+          7,
+          5,
+          6,
+          4,
+          6,
+          5,
+          6
+        ]
+      }
+    },
+    "one external call": {
+      "median": 69,
+      "min": 57,
+      "max": 150,
+      "times": [
+        57,
+        69,
+        69,
+        58,
+        68,
+        74,
+        64,
+        63,
+        69,
+        72,
+        77,
+        66,
+        75,
+        150,
+        77
+      ],
+      "end": {
+        "median": 5,
+        "min": 4,
+        "max": 7,
+        "times": [
+          5,
+          5,
+          5,
+          4,
+          4,
+          6,
+          5,
+          4,
+          4,
+          6,
+          7,
+          5,
+          5,
+          7,
+          5
+        ]
+      }
+    },
+    "5 feeds": {
+      "failed": "no REPL"
+    },
+    "10 feeds x 5 calls": {
+      "failed": "no REPL"
+    }
+  }
+}

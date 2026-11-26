@@ -1,8 +1,8 @@
 # Sandbox Benchmarks
 
 An experiment comparing how code running in a remote sandbox can call functions on the host machine, across
-eight sandbox providers: Pydantic Logfire Agent Sandboxes, Modal, E2B, Daytona, Vercel Sandbox, Cloudflare sandboxes,
-boat.dev and boxd.
+nine sandbox providers: Pydantic Logfire Agent Sandboxes, Modal, E2B, Daytona, Vercel Sandbox, Cloudflare sandboxes,
+Cloudflare Dynamic Workers (in Python and in JavaScript), boat.dev and boxd.
 
 Each script in `play_tune/` runs the same program in a sandbox, a tune that calls `play(note, seconds)` 78
 times, and the host plays each note through the speakers. The modules in `benchmarks/` time five
@@ -12,19 +12,22 @@ cases on each provider.
 
 Median milliseconds from GCP us-east4-a, 2026-11-25 to 2026-11-26, from asking for a new session to having the result:
 
-| Provider                                                                       | `1 + 1`     | `1 + 1` direct | one external call | 5 feeds    | 10 feeds x 5 calls |
-| ------------------------------------------------------------------------------ | ----------- | -------------- | ----------------- | ---------- | ------------------ |
-| [Pydantic Logfire (turbo)](https://pydantic.dev/docs/logfire/agent-sandboxes/) | 24          | 23             | 36                | 74         | 692 (1.0x)         |
-| [Pydantic Logfire](https://pydantic.dev/docs/logfire/agent-sandboxes/)         | 85 (3.5x)   | 85 (3.7x)      | 91 (2.5x)         | 125 (1.7x) | 661                |
-| [E2B](https://e2b.dev)                                                         | 459 (19x)   | 514 (22x)      | 548 (15x)         | 773 (10x)  | 5056 (7.6x)        |
-| [Modal](https://modal.com/docs/guide/sandboxes)                                | 464 (19x)   | 414 (18x)      | 434 (12x)         | 818 (11x)  | 1480 (2.2x)        |
-| [Daytona](https://www.daytona.io)                                              | 506 (21x)   | 131 (5.7x)     | 569 (16x)         | 926 (13x)  | 3306 (5.0x)        |
-| [boxd](https://boxd.sh)                                                        | 787 (33x)   | 828 (36x)      | 799 (22x)         | 847 (11x)  | 1282 (1.9x)        |
-| [Cloudflare sandbox](https://developers.cloudflare.com/sandbox/)               | 880 (37x)   | 960 (42x)      | 886 (25x)         | 914 (12x)  | 3243 (4.9x)        |
-| [Vercel](https://vercel.com/docs/sandbox)                                      | 1070 (45x)  | 772 (34x)      | 944 (26x)         | 1543 (21x) | 5934 (9.0x)        |
-| [boat.dev](https://boat.dev)                                                   | 2395 (100x) | 1016 (44x)     | 2390 (66x)        | 3702 (50x) | 7480 (11x)         |
+| Provider                                                                                  | `1 + 1`     | `1 + 1` direct | one external call | 5 feeds    | 10 feeds x 5 calls |
+| ----------------------------------------------------------------------------------------- | ----------- | -------------- | ----------------- | ---------- | ------------------ |
+| [Pydantic Logfire (turbo)](https://pydantic.dev/docs/logfire/agent-sandboxes/)            | 24          | 23             | 36                | 74         | 692 (1.0x)         |
+| [Cloudflare Dynamic Workers (JS)](https://developers.cloudflare.com/dynamic-workers/)     | 71 (3.0x)   | 71 (3.1x)      | 69 (1.9x)         | ❌          | ❌                  |
+| [Pydantic Logfire](https://pydantic.dev/docs/logfire/agent-sandboxes/)                    | 85 (3.5x)   | 85 (3.7x)      | 91 (2.5x)         | 125 (1.7x) | 661                |
+| [E2B](https://e2b.dev)                                                                    | 459 (19x)   | 514 (22x)      | 548 (15x)         | 773 (10x)  | 5056 (7.6x)        |
+| [Modal](https://modal.com/docs/guide/sandboxes)                                           | 464 (19x)   | 414 (18x)      | 434 (12x)         | 818 (11x)  | 1480 (2.2x)        |
+| [Daytona](https://www.daytona.io)                                                         | 506 (21x)   | 131 (5.7x)     | 569 (16x)         | 926 (13x)  | 3306 (5.0x)        |
+| [boxd](https://boxd.sh)                                                                   | 787 (33x)   | 828 (36x)      | 799 (22x)         | 847 (11x)  | 1282 (1.9x)        |
+| [Cloudflare sandbox](https://developers.cloudflare.com/sandbox/)                          | 880 (37x)   | 960 (42x)      | 886 (25x)         | 914 (12x)  | 3243 (4.9x)        |
+| [Cloudflare Dynamic Workers (Python)](https://developers.cloudflare.com/dynamic-workers/) | 1061 (44x)  | 1027 (45x)     | 998 (28x)         | 1131 (15x) | 1345 (2.0x)        |
+| [Vercel](https://vercel.com/docs/sandbox)                                                 | 1070 (45x)  | 772 (34x)      | 944 (26x)         | 1543 (21x) | 5934 (9.0x)        |
+| [boat.dev](https://boat.dev)                                                              | 2395 (100x) | 1016 (44x)     | 2390 (66x)        | 3702 (50x) | 7480 (11x)         |
 
 - Pydantic Logfire (turbo): Pydantic Logfire with `pre_warm=5`: the client keeps five sessions open in the background, so asking for one takes a session that already exists instead of waiting for one to start. They are opened before the timer starts, and the second the benchmark waits between sessions is enough for the pool to refill. Every other row starts its sandbox inside the timed part.
+- Cloudflare Dynamic Workers (JS): The modules are JavaScript, not the shared Python, and await each call to the host. There is no REPL: Workers only compile code from a string while a module loads, so an isolate cannot run one feed after another, and the two cases that keep state between feeds are not implemented.
 - Daytona: The sandboxes are in Daytona's `us` region.
 - boxd: The machines are in boxd's `nyc` region.
 - boat.dev: Five sessions per case, to stay inside boat.dev's start limits. Its sandboxes are all in the EU.
@@ -48,6 +51,8 @@ uv sync
 | Modal                    | `benchmarks.modal`              | `modal setup` to have been run                                                                      |
 | E2B                      | `benchmarks.e2b`                | `E2B_API_KEY`                                                                                       |
 | Cloudflare sandbox       | `benchmarks.cloudflare_sandbox` | `CLOUDFLARE_SANDBOX_URL` and `CLOUDFLARE_SANDBOX_KEY`, for your deployment of `cloudflare_sandbox/` |
+| Dynamic Worker (Python)  | `benchmarks.dynamic_worker`     | `DYNAMIC_WORKER_URL` and `DYNAMIC_WORKER_KEY`, for your deployment of `dynamic_worker/`             |
+| Dynamic Worker (JS)      | `benchmarks.dynamic_worker_js`  | the same                                                                                            |
 | Daytona                  | `benchmarks.daytona`            | `DAYTONA_API_KEY`                                                                                   |
 | Vercel                   | `benchmarks.vercel`             | `VERCEL_OIDC_TOKEN`, which `vercel env pull` writes and which lasts 12 hours                        |
 | boat.dev                 | `benchmarks.boat`               | `BOAT_API_KEY`, and `ssh` on your machine                                                           |
@@ -77,7 +82,8 @@ npm install && npx wrangler deploy    # Docker must be running
 npx wrangler secret put API_KEY       # the value you then use as CLOUDFLARE_SANDBOX_KEY
 ```
 
-`CLOUDFLARE_SANDBOX_URL` is the Worker's address with `wss://` in front.
+`CLOUDFLARE_SANDBOX_URL` is the Worker's address with `wss://` in front. Dynamic Workers are the same: deploy
+`dynamic_worker/` the same way, without needing Docker, and set `DYNAMIC_WORKER_URL` and `DYNAMIC_WORKER_KEY`.
 
 To run every provider from US east, `gcp_bench.sh` creates a VM in a GCP project of yours, runs them there and
 deletes the VM:
@@ -95,7 +101,9 @@ functions on the host or keep state, which makes it the fairer of the two sums t
 E2B's `run_code` or `python -c` through Modal's `exec`, and reads what it prints.
 
 The four cases other than `1 + 1 direct` call functions on the host or keep state between feeds. Only Pydantic
-Logfire has that built in. For the others we built a request and reply on whatever the provider's docs show for talking to a
+Logfire has that built in. Cloudflare Dynamic Workers can call functions over RPC, but only functions in the
+Worker that loaded them, so the calls still have to be passed on to the host. The JavaScript ones run the first
+three cases as JavaScript modules, and cannot run the two that keep state between feeds (❌). For the others we built a request and reply on whatever the provider's docs show for talking to a
 running program, and it is started only for those cases. The docstring at the top of each module in
 `benchmarks/`, such as [`benchmarks/modal.py`](benchmarks/modal.py), says why it was done that way and what it
 costs; the one in [`benchmarks/shared.py`](benchmarks/shared.py) covers what they have in common.
