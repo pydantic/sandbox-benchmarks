@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The Worker the Dynamic Workers scripts talk to, which loads each session's Python into a Dynamic Worker:
+  // `npm install && npx wrangler deploy`, then `npx wrangler secret put API_KEY`.
+  "name": "sandbox-dynamic-worker",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-24",
+  "worker_loaders": [{ "binding": "LOADER" }],
+}

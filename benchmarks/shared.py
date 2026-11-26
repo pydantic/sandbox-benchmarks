@@ -51,6 +51,9 @@ RESULTS = Path(__file__).parent.parent / 'results'
 class Session(ABC):
     """One sandbox. A session is used for one `run`, or for any number of `feed_run`s."""
 
+    # the language the cases send code in, 'python' or 'js'
+    language = 'python'
+
     @abstractmethod
     async def run(self, code: str) -> str:
         """Run a program the way the provider's API offers and return what it printed.
@@ -75,6 +78,9 @@ class Pool(ABC):
     async def __aexit__(self, *args: object) -> None:
         return None
 
+    # False for a provider that cannot keep state between feeds: the cases in NEEDS_REPL are then recorded as failed
+    repl = True
+
     @abstractmethod
     def checkout(self) -> AbstractAsyncContextManager[Session]:
         """A new session, ended on leaving the block. The benchmark times the whole block."""
@@ -94,22 +100,27 @@ def double(x: int) -> int:
     return x * 2
 
 
+# the code the first three cases send, by language: in JavaScript it is a module whose default export is given
+# the host functions and returns the result
+ONE_PLUS_ONE = {'python': '1 + 1', 'js': 'export default async () => 1 + 1'}
+PRINT_1_PLUS_1 = {'python': 'print(1 + 1)', 'js': 'export default async () => console.log(1 + 1)'}
+ONE_CALL = {'python': 'get_name()', 'js': 'export default async ({ get_name }) => await get_name()'}
 FIVE_CALLS = 'a = double(1)\nb = double(a)\nc = double(b)\nd = double(c)\ne = double(d)\ne'
 EXT = {'external_lookup': {'get_name': get_name, 'double': double}}
 
 
 async def case_1_plus_1(s: Session) -> None:
     # through `feed_run`, so it pays for what state and host functions need, as most real uses do
-    assert await s.feed_run('1 + 1', **EXT) == 2
+    assert await s.feed_run(ONE_PLUS_ONE[s.language], **EXT) == 2
 
 
 async def case_1_plus_1_direct(s: Session) -> None:
     # the same sum run the provider's own way, with no state or host functions
-    assert (await s.run('print(1 + 1)')).strip() == '2'
+    assert (await s.run(PRINT_1_PLUS_1[s.language])).strip() == '2'
 
 
 async def case_one_call(s: Session) -> None:
-    assert await s.feed_run('get_name()', **EXT) == 'world'
+    assert await s.feed_run(ONE_CALL[s.language], **EXT) == 'world'
 
 
 async def case_5_feeds(s: Session) -> None:
@@ -129,6 +140,8 @@ CASES = [
     ('5 feeds', case_5_feeds),
     ('10 feeds x 5 calls', case_10_feeds_5_calls),
 ]
+# the cases that keep state between feeds
+NEEDS_REPL = {'5 feeds', '10 feeds x 5 calls'}
 
 
 def summary(times: list[float]) -> dict[str, Any]:
@@ -148,6 +161,10 @@ async def run(key: str, pool: Pool, n: int) -> dict[str, Any]:
     """
     cases: dict[str, Any] = {}
     for name, case in CASES:
+        if name in NEEDS_REPL and not pool.repl:
+            print(f'{key:<18} {name:<20} failed: no REPL', flush=True)
+            cases[name] = {'failed': 'no REPL'}
+            continue
         times: list[float] = []
         ends: list[float] = []
         refused = 0

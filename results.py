@@ -21,12 +21,15 @@ def table(ranges: bool = False) -> str:
     cases = list(results[0]['cases'])
     results.sort(key=lambda r: r['cases'][cases[0]]['median'])
     rows = [['Provider', *(case.replace('1 + 1', '`1 + 1`') for case in cases)]]
-    fastest = {case: min(r['cases'][case]['median'] for r in results) for case in cases}
+    # a case a provider cannot run, such as one that needs a REPL, is recorded as failed and shown as ❌
+    fastest = {case: min(r['cases'][case]['median'] for r in results if 'median' in r['cases'][case]) for case in cases}
     for r in results:
         row = [f'[{r["provider"]}]({r["url"]})']
         for case in cases:
             c = r['cases'][case]
-            if ranges:
+            if 'failed' in c:
+                row.append('❌')
+            elif ranges:
                 row.append(f'{c["min"]}–{c["max"]}')
             elif c['median'] == fastest[case]:
                 row.append(str(c['median']))

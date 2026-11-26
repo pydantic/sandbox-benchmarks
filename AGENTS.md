@@ -17,6 +17,11 @@ eight sandbox providers. Each script runs the same sandboxed program, a tune tha
 - `play_tune_vercel.py`: Vercel Sandbox. The same JSON-lines protocol, over the stdin of a running command.
 - `play_tune_cloudflare_sandbox.py`: Cloudflare sandboxes. The same JSON-lines protocol, over a WebSocket to the
   Worker in `cloudflare_sandbox/`, which passes it to the stdin and stdout of the program in a container.
+- `play_tune_dynamic_worker.py`: Cloudflare Dynamic Workers. The same JSON-lines protocol, over a WebSocket to the
+  Worker in `dynamic_worker/`, which runs the code in a new Python isolate and gives it `exchange(line)`, an RPC
+  call back to the Worker that sends the line down the socket and returns the reply.
+- `play_tune_dynamic_worker_js.py`: the same, in JavaScript, through the same Worker with `?lang=js`. Its own
+  `code` is the tune translated to a JavaScript module, awaiting `play`, since JavaScript cannot block on a call.
 - `play_tune_boat.py`: boat.dev. The same JSON-lines protocol, over `ssh`, since its commands have no stdin.
 - `play_tune_boxd.py`: boxd. The same JSON-lines protocol, over the stdin and stdout of an interactive `exec`.
 
@@ -26,7 +31,8 @@ eight sandbox providers. Each script runs the same sandboxed program, a tune tha
   for a new session to having the result, and the REPL the providers other than Logfire and Daytona run in
   the sandbox.
 - `logfire.py`, `logfire_turbo.py` (Logfire with `pre_warm`), `modal.py`, `e2b.py`, `daytona.py`, `vercel.py`,
-  `cloudflare_sandbox.py`, `boat.py`, `boxd.py`: a `Pool` whose `checkout()` gives a `Session`. Its `run(code)` runs a
+  `cloudflare_sandbox.py`, `dynamic_worker.py`, `dynamic_worker_js.py`, `boat.py`, `boxd.py`: a `Pool` whose
+  `checkout()` gives a `Session`. Its `run(code)` runs a
   program the provider's own way and is what `1 + 1 direct` uses; its `feed_run(code, external_lookup=...)` has
   Monty's interface, and for that each provider but Logfire starts a small REPL in the sandbox over the
   same transport as its `play_tune_*.py` script, so state survives between feeds and each feed returns its
@@ -36,6 +42,9 @@ The rest:
 
 - `cloudflare_sandbox/`: the Worker for Cloudflare sandboxes, which have no hosted API. Deploy it with
   `npm install && npx wrangler deploy` (Docker must be running), then `npx wrangler secret put API_KEY`.
+- `dynamic_worker/`: the Worker for Cloudflare Dynamic Workers. In Python it loads one Dynamic Worker for each
+  WebSocket, and with `?lang=js` the same for a JavaScript module. Deploy it with
+  `npm install && npx wrangler deploy`, then `npx wrangler secret put API_KEY`.
 - `gcp_bench.sh`: runs every benchmark from a temporary GCP VM in `us-east4`, copies the results into
   `results/`, then deletes the VM.
 - `results/` and `results.py`: each provider's latest run, and the script that prints them as a table.
@@ -58,7 +67,8 @@ uv run play_tune/play_tune.py           # or play_tune/play_tune_modal.py, play_
 Each benchmark is a module, run from the repo root, taking the number of sessions per case (default 5):
 
 ```bash
-uv run -m benchmarks.logfire 5     # or logfire_turbo, modal, e2b, daytona, vercel, cloudflare_sandbox, boat, boxd
+uv run -m benchmarks.logfire 5     # or logfire_turbo, modal, e2b, daytona, vercel, cloudflare_sandbox,
+                                   # dynamic_worker, dynamic_worker_js, boat, boxd
 ```
 
 To run it from US east, which creates a VM in a GCP project of yours and deletes it afterwards:
@@ -74,7 +84,8 @@ Credentials:
   one. It is git-ignored and nothing loads it automatically, so source it first.
 - Modal uses the credentials written by `modal setup`.
 - Vercel needs `VERCEL_OIDC_TOKEN`; Cloudflare sandboxes need
-  `CLOUDFLARE_SANDBOX_URL` (`wss://...workers.dev`) and `CLOUDFLARE_SANDBOX_KEY` (the Worker's `API_KEY`); boat
+  `CLOUDFLARE_SANDBOX_URL` (`wss://...workers.dev`) and `CLOUDFLARE_SANDBOX_KEY` (the Worker's `API_KEY`), and
+  Dynamic Workers `DYNAMIC_WORKER_URL` and `DYNAMIC_WORKER_KEY` in the same way, for `dynamic_worker/`; boat
   needs `BOAT_API_KEY`; boxd needs `BOXD_API_KEY`. All go in `.env`.
 
 Never print, log or commit key values.
@@ -88,6 +99,8 @@ Never print, log or commit key values.
 - To add a host function, add it to the `functions` dict and add a wrapper to `stub` in each of the
   non-Logfire scripts, and to `external_lookup` in `play_tune/play_tune.py`.
 - Keep the scripts short and comparable: the same `code`, the same `play`, and only the transport differing.
+  The exceptions are `play_tune_dynamic_worker_js.py` and the JavaScript cases in `benchmarks/shared.py`, for
+  sessions with `language = 'js'`, which have to be JavaScript; keep them doing exactly what the Python does.
 - Always terminate or delete the sandbox in a `finally` block, since they are billed while they run.
 - Python 3.15, managed with uv. Single quotes, type hints on host functions.
 
@@ -125,7 +138,21 @@ for most means deleting the sandbox, is timed separately and saved under `end`; 
 - Vercel's `VERCEL_OIDC_TOKEN` comes from `vercel env pull` in a linked project, and it lasts
   12 hours. Each reply to a call is its own HTTPS request, about 200ms from London, and stopping and deleting
   a sandbox takes about 1.4 seconds.
-- The Cloudflare sandbox Worker deploys under the name `sandbox-host-function`.
+- The Cloudflare sandbox Worker deploys under the name `sandbox-host-function`. The Dynamic Workers one deploys as
+  `sandbox-dynamic-worker`.
+- A Dynamic Worker's `env` can only hold structured-cloneable values and service bindings: putting an
+  `RpcTarget` in it fails with `DataCloneError: Remote RPC references can only be serialized for RPC`. The Worker
+  passes its `Client` as an argument of the Python entrypoint's `run()` instead, and the Python code blocks on
+  each call with `pyodide.ffi.run_sync`.
+- Workers only allow code to be compiled from a string (`new Function`, `eval`) while a module loads, not while
+  it handles a request, and there is no compatibility flag to change that. So there is no JavaScript REPL: a
+  session runs one module, its pool has `repl = False`, and the cases in `NEEDS_REPL` are saved as
+  `{"failed": "no REPL"}`, which the table shows as ❌.
+- Nearly all of a Dynamic Worker's time is Python starting: 0.8 to 2.5 seconds, measured by the loader from
+  `load()` to the first call. A JavaScript Dynamic Worker running the same calls starts in about 10ms. `get()`
+  with a fixed ID only sometimes finds a warm Python isolate (one session in five), so it barely helps. A call to
+  the host takes about 10ms from London, the same as a plain WebSocket echo through the loader. Some runs have
+  calls of 100ms to a second, but so does the echo, so that is the network, not the RPC.
 - The boxd machines are in its `nyc` region, the nearest to `us-east4`. boxd also has `fra`.
 - Closing the WebSocket ends a Cloudflare sandbox session, and the Worker destroys the container after that,
   so its `end` times are near zero and do not include the deletion. The first message on the socket is the
